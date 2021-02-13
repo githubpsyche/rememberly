@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <title>Rememberly</title>
+
+        <script language="JavaScript">
+                function showInput () {
+			document.getElementById('textResult').innerHTML =
+				document.getElementById("inputText").value;
+        </script>
+</head>
+<body>
+        <h1 style="text-align:center">Rememberly</h1>
+
+        <h2 style="text-align:center">What is Rememberly?</h2>
+        <P style="text-align:center"> Blurb about our product. We will write a whole paragraph of nonsense here. It'll be great!
+
+        <h2 style="text-align:center">Text to Analyze</h2>
+        <form method="POST" action="/data" id="textBoxEntry">
+                <p style="text-align:center">
+                <textarea id="inputText" rows="10" cols="100">Your text here</textarea>
+                </p>
+        </form>
+
+        <P style="text-align:center"><input type=submit value="Submit" onclick="showInput();"></br>
+
+        <p style="text-align:center"><label>Your input: </label></p>
+        <p style="text-align:center"><span id='textResult'></span><p>
+</body>
+</html>
