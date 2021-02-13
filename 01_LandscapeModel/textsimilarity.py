@@ -33,6 +33,18 @@ class TextSimilarity(nn.Module):
         self.model = SentenceTransformer(sbert_model_name)
         self.to(dev)
 
+    @staticmethod
+    def cosine_similarity(x):
+        """
+        Custom implementation of cosine similarities between every text unit
+        pdist doesn't make it a square matrix, but we can with pure torch
+        returns: cosine similarities matrix of shape (n, n)
+        """
+        norm = x.norm(dim=-1).unsqueeze(0)
+
+        # this is the formula for cosine similarities in a symmetric matrix
+        return x @ x.t() / (norm.t() @ norm)
+
     def forward(self, reading_cycles):
         """
         Computes cosine similarities between n sentences as a matrix
@@ -51,11 +63,6 @@ class TextSimilarity(nn.Module):
         embeds = self.model.encode(text_unit_list, convert_to_tensor=True)
 
         # cosine similarities between every text unit of shape (n, n)
-        # pdist doesn't make it a square matrix, but we can just implement it directly
-        # find the length of every embedding
-        norm = embeds.norm(dim=-1).unsqueeze(0)
-        # this is the formula for cosine similarities in a symmetric matrix
-        S = embeds @ embeds.t() / (norm.t() @ norm)
+        S = self.cosine_similarity(embeds)
 
-        # return similarity measures and embeddings; returns torch tensors
         return S, embeds

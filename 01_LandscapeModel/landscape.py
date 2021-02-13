@@ -16,6 +16,7 @@ else:
 class Landscape(nn.Module):
     """
     Human memory model for text comprehension
+    Combines text similarity measure and LS-R algorithm
 
     Parameters to fit:
       maximum_activation
@@ -25,22 +26,22 @@ class Landscape(nn.Module):
     can add semantic_strength_coeff if necessary
     """
 
-    def __init__(self, reading_cycles,
-                 initial_similarities,
+    def __init__(self, sbert_model_name,
                  initial_max_activation=1.0,
                  initial_decay_rate=0.1,
                  initial_memory_capacity=5.0,
                  initial_learning_rate=0.9):
+
         """
         reading_cycles is list of lists input to the TextSimilarity measure
         initial_similarities is the output of a TextSimilarity over reading_cycles
         """
         super(Landscape, self).__init__()
-        # to be able to reset the model
-        self.initial_params = (
-            reading_cycles, initial_similarities, initial_max_activation,
-            initial_decay_rate, initial_memory_capacity, initial_learning_rate
-        )
+
+        # create the text similarity measure
+        self.sbert_model = sbert_model_name
+        self.text_similarity = TextSimilarity(sbert_model_name)
+
         # initialize trainable parameters
         # what's a good initial max activation?
         self.maximum_activation = nn.Parameter(
@@ -59,21 +60,9 @@ class Landscape(nn.Module):
         # non-negotiable minimum activation
         self.minimum_activation = 0
 
-        # to be able to use a vector and determine when to stop "reading" on the fly
-        self.reading_cycle_lengths = [len(reading_cycle) for reading_cycle in reading_cycles] + [0]
-
-        # single vector to make calculations much simpler
-        # randomly initialized between [0, 1] -> is this a good idea?
-        self.activations = torch.zeros(1, sum(self.reading_cycle_lengths),
-                                       requires_grad=True, device=dev)
-
-        # intialize similarities matrix to input; no need for cloning, I think
-        self.S = initial_similarities.clone().to(dev)
-
-        # to prevent calling forward() more than once
-        self.forward_calls = 0
-
+        # shift to device
         self.to(dev)
+        self.device = dev
 
     @staticmethod
     def sigma(x):
@@ -84,68 +73,76 @@ class Landscape(nn.Module):
         """
         return torch.tanh(3 * (x - 1)) + 1
 
-    def reset(self, *params):
-        """
-        Reset so that we don't have to create new instances for every set of reading cycles
-        """
-        if len(params) == 1:
-            raise ValueError("If using new reading cycles, also input the new initial similarity matrix")
-        params_ = [*params, *self.initial_params[len(params):]]
-        self.__init__(*params_)
-
-    def update_activations(self, num_prev_text_units, cycle_len):
+    def update_activations(self, activations, S, num_prev_text_units, cycle_len):
         """
         For customizability
-        Updates activations for a single reading cycle, given
+        Updates input activations for a single reading cycle, given
+          activations: from previous cycle
+          S: similarity matrix from previous cycle
           num_prev_text_units: the number of previously read units in the set of reading cycles
           cycle_len: the number of text units in current cycle
         """
-        self.activations = self.decay_rate * (self.sigma(self.S) @ self.activations.t()).t()
+        activations = self.decay_rate * (self.sigma(S) @ activations.t()).t()
 
         # working memory simulation
-        activation_sum = self.activations.sum()
+        activation_sum = activations.sum()
         if activation_sum > self.working_memory_capacity:
             # scale activations proportionally so their sum equals working memory capacity
-            self.activations = self.activations * self.working_memory_capacity / activation_sum
+            activations = activations * self.working_memory_capacity / activation_sum
 
         # attention simulation: set current reading cycle activations to max_val
-        self.activations[:, num_prev_text_units - cycle_len:num_prev_text_units] = (
+        activations[:, num_prev_text_units - cycle_len:num_prev_text_units] = (
                 torch.ones(1, cycle_len, device=dev) * self.maximum_activation
         )
+        return activations
 
-    def update_S(self):
+    def update_S(self, activations, S):
         """
         For customizability
         Updates S matrix for a single reading cycle
         """
-        self.S = self.S + self.lambda_lr * self.activations.t() @ self.activations
+        S = S + self.lambda_lr * activations.t() @ activations
+        return S
 
-    def cycle(self, num_prev_text_units, cycle_len):
+    def cycle(self, activations, S, num_prev_text_units, cycle_len):
         """
         Complete update self for a single reading cycle, given the parameters necessary to update
         the activations
         """
-        self.update_activations(num_prev_text_units, cycle_len)
-        self.update_S()
+        activations = self.update_activations(activations, S, num_prev_text_units, cycle_len)
+        S = self.update_S(activations, S)
+        return activations, S
 
-    def forward(self):
+    def forward(self, reading_cycles, return_activations_in_cycles=True):
         """
-        Compute the entire activation and update process
+        Compute the entire activation and update process for the input reading cycles
+        """
+        reading_cycle_lengths = [len(reading_cycle) for reading_cycle in reading_cycles] + [0]
 
-        PERFORM THIS ONLY ONCE
-        OTHERWISE THE S matrix and activations will keep updating and growing larger and larger
-        """
-        if self.forward_calls > 0:
-            raise Warning("forward() more than once")
-        self.forward_calls += 1
+        # initialize activations to a single vector to make calculations much simpler
+        activations = torch.zeros(1, sum(reading_cycle_lengths),
+                                  requires_grad=True, device=self.device)
 
         num_text_units = 0
 
+        # intialize similarities matrix to input; no need for cloning, I think
+        S, _ = self.text_similarity(reading_cycles)
+        S = S.to(self.device)
+
         # for each reading cycle
-        for rc_len in self.reading_cycle_lengths:
+        for rc_len in reading_cycle_lengths:
             # get the number of prior text units
             num_text_units += rc_len
-            self.cycle(num_text_units, rc_len)
+            # update activations and S
+            activations, S = self.cycle(activations, S, num_text_units, rc_len)
 
-        # just to see the output
-        return self.activations, self.S
+        # output
+        if return_activations_in_cycles:
+            out = []
+            prev_idx = 0
+            for rc_len in reading_cycle_lengths[:-1]:
+                out += [activations[:, prev_idx:prev_idx + rc_len]]
+                prev_idx += rc_len
+            return out, S
+
+        return activations, S
