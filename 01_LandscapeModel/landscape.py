@@ -23,6 +23,7 @@ class Landscape(nn.Module):
       decay_rate
       working_memory_capacity
       lambda_lr
+      SBERT() (optional)
     can add semantic_strength_coeff if necessary
     """
 
@@ -75,7 +76,6 @@ class Landscape(nn.Module):
 
     def update_activations(self, activations, S, num_prev_text_units, cycle_len):
         """
-        For customizability
         Updates input activations for a single reading cycle, given
           activations: from previous cycle
           S: similarity matrix from previous cycle
@@ -85,7 +85,7 @@ class Landscape(nn.Module):
         activations = self.decay_rate * (self.sigma(S) @ activations.t()).t()
 
         # working memory simulation
-        activation_sum = activations.sum()
+        activation_sum = activations.sum() + 1e-6
         if activation_sum > self.working_memory_capacity:
             # scale activations proportionally so their sum equals working memory capacity
             activations = activations * self.working_memory_capacity / activation_sum
@@ -98,8 +98,7 @@ class Landscape(nn.Module):
 
     def update_S(self, activations, S):
         """
-        For customizability
-        Updates S matrix for a single reading cycle
+        Update S matrix for a single reading cycle
         """
         S = S + self.lambda_lr * activations.t() @ activations
         return S
@@ -113,7 +112,7 @@ class Landscape(nn.Module):
         S = self.update_S(activations, S)
         return activations, S
 
-    def forward(self, reading_cycles, return_activations_in_cycles=True):
+    def forward(self, reading_cycles, return_as_cycles=False):
         """
         Compute the entire activation and update process for the input reading cycles
         """
@@ -129,20 +128,68 @@ class Landscape(nn.Module):
         S, _ = self.text_similarity(reading_cycles)
         S = S.to(self.device)
 
+        # initialize empty history list for output visualization
+        # to track evolution of activations
+        history = []
+
         # for each reading cycle
         for rc_len in reading_cycle_lengths:
             # get the number of prior text units
             num_text_units += rc_len
             # update activations and S
             activations, S = self.cycle(activations, S, num_text_units, rc_len)
+            # append to history
+            history.append(activations)
+
+        # concat history to a matrix - (num_reading_cycles + 1, num_text_units)
+        # i.e., it is a cycles by text_units matrix
+        # do we need the + 1 -> I put it to simulate finishing reading the cycles
+        history = torch.cat(history, dim=0)
 
         # output
-        if return_activations_in_cycles:
+        if return_as_cycles:
             out = []
             prev_idx = 0
             for rc_len in reading_cycle_lengths[:-1]:
                 out += [activations[:, prev_idx:prev_idx + rc_len]]
                 prev_idx += rc_len
-            return out, S
+            return out, S, history
 
-        return activations, S
+        return activations, S, history
+
+    def output_probabilities(self, reading_cycle, sensitivity=1.0,
+                             return_as_cycles=False):
+        """
+        Extension of forward to get activations as a distribution vector, or as a
+        set of distribution vectors for each cycle
+        """
+        reading_cycle_lengths = [len(reading_cycle) for reading_cycle in reading_cycles]
+
+        activations, _, history = self(reading_cycle, return_as_cycles=False)
+        act_logits = torch.pow(activations, sensitivity)
+        hist_logits = torch.pow(history, sensitivity)
+
+        # softmax is problematic - not outputting clean distributions
+        act_probs = act_logits / (act_logits.sum() + 1e-6)
+        hist_probs = hist_logits / (hist_logits.sum(dim=-1).unsqueeze(1) + 1e-6)
+
+        if return_as_cycles:
+            out = []
+            hist_out = {}
+            # initialize all history cycle outputs to an empty list
+            for i in range(hist_probs.shape[0]):
+                hist_out[f"cycle_{i}"] = []
+
+            prev_idx = 0
+            count = 0
+            for rc_len in reading_cycle_lengths:
+                out += [act_probs[:, prev_idx:prev_idx + rc_len]]
+
+                for i in range(hist_probs.shape[0]):
+                    hist_out[f"cycle_{i}"].append(hist_probs[i, prev_idx:prev_idx + rc_len])
+
+                prev_idx += rc_len
+
+            return out, hist_out
+
+        return act_probs, hist_probs
