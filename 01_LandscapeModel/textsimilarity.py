@@ -7,7 +7,6 @@ Dependencies: sentence_transformers
 
 import torch
 import torch.nn.functional as F
-from scipy.spatial import distance
 from sentence_transformers import SentenceTransformer
 
 # get device
@@ -17,15 +16,18 @@ else:
     dev = torch.device("cpu")
 
 
-class TextSimilarity(torch.nn.Module):
+class TextSimilarity(nn.Module):
     """
+    LSA replacement
     Computes embeddings for a pair of given sentences and calculates the cosine
     similarity between them
     """
 
-    def __init__(self, sbert_model_name):
+    def __init__(self, sbert_model_name="stsb-distilbert-base"):
         """
-        sbert_model_name: sbert model to use, I think "stsb-roberta-base" is good
+        sbert_model_name: sbert model to use
+        "stsb-roberta-base" is best, but it's double the size of "stsb-distilbert-base",
+        with only marginal increase in STS accuracy
         """
         super(TextSimilarity, self).__init__()
         self.model = SentenceTransformer(sbert_model_name)
@@ -38,17 +40,22 @@ class TextSimilarity(torch.nn.Module):
         from the text segmentation process
         reading_cycles: list of lists of text unit strings
 
-        Returns: S, the initial similarity matrix over all text units
+        Returns: S, the initial similarity matrix over all text units: shape(num_text_units, num_text_units)
+                 embeds, the list of text unit embeddings by SBERT, in case we need them: shape(num_text_units, 768)
         """
         # expand the reading cycles into a list of text units
         text_unit_list = [text_unit for reading_cycle in reading_cycles for text_unit in reading_cycle]
 
-        # embeds is the tensor of text_unit embeddings over all text_units in the reading cycle
+        # embeds is a numpy tensor of text_unit embeddings over all text_units in the reading cycle
         # of shape (n, embed_dim), embed_dim=768 in BERT, n = num_text_units
         embeds = self.model.encode(text_unit_list, convert_to_tensor=True)
 
-        # cosine similarities between every text unit of shape (n * (n - 1) // 2, )
-        S = 1 - scipy.spatial.distance.pdist(embeds, metric="cosine")
+        # cosine similarities between every text unit of shape (n, n)
+        # pdist doesn't make it a square matrix, but we can just implement it directly
+        # find the length of every embedding
+        norm = embeds.norm(dim=-1).unsqueeze(0)
+        # this is the formula for cosine similarities in a symmetric matrix
+        S = embeds @ embeds.t() / (norm.t() @ norm)
 
-        # return similarity measures and embeddings
-        return torch.tensor(S), embeds
+        # return similarity measures and embeddings; returns torch tensors
+        return S, embeds
