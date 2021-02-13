@@ -1,12 +1,13 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect
+import sys
 app = Flask(__name__)
 
 @app.route('/')
 def startpage():
         return render_template('interface.html')
 
-@app.route('/send_data', methods = ['POST'])
+@app.route('/data')
 def get_HTML_data():
         text = request.form['textInput']
-        print("Text Inputted is" + textInput)
-        return json.loads(text)[0]
+        sys.stderr.write(text)
+        return redirect('/')

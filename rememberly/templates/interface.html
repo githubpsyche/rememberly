@@ -4,10 +4,9 @@
         <title>Rememberly</title>
 
         <script language="JavaScript">
-                function showInput() {
-                        document.getElementById('text').innerHTML =
-                                document.getElementById("inputText").value;
-                }
+                function showInput () {
+			document.getElementById('textResult').innerHTML =
+				document.getElementById("inputText").value;
         </script>
 </head>
 <body>
@@ -17,19 +16,15 @@
         <P style="text-align:center"> Blurb about our product. We will write a whole paragraph of nonsense here. It'll be great!
 
         <h2 style="text-align:center">Text to Analyze</h2>
-        <form method="POST" action="makeData.php">
+        <form method="POST" action="/data" id="textBoxEntry">
                 <p style="text-align:center">
                 <textarea id="inputText" rows="10" cols="100">Your text here</textarea>
                 </p>
-
-                <p style="text-align:center>
-                <input type=submit value="Submit">
-                </p>i
         </form>
 
-        <!-- <P style="text-align:center"><input type=submit value="Submit" onclick="showInput();"></br> -->
+        <P style="text-align:center"><input type=submit value="Submit" onclick="showInput();"></br>
 
         <p style="text-align:center"><label>Your input: </label></p>
-        <p style="text-align:center"><span id='text'></span><p>
+        <p style="text-align:center"><span id='textResult'></span><p>
 </body>
 </html>
