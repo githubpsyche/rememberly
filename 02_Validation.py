@@ -51,7 +51,7 @@ import numpy as np
 import pandas as pd
 from psifr import fr
 
-def prepare_brownschmidt_data(path, dataset_index):
+def prepare_brownschmidt_data(path, story):
     """
     Prepares data formatted in a text-annotated Psifr format for model fitting. 
 
@@ -69,12 +69,34 @@ def prepare_brownschmidt_data(path, dataset_index):
     - merged: as a long format table where each row describes one study or recall event.  
     - list_length: length of lists studied in the considered dataset
     """
-    # load dataset data from psifr format
 
-    
-    # encode dataset into array format
- 
-    return trials, merged, list_length
+    # load dataset data from psifr format
+    df = pd.read_csv(path, sep='\t')
+    df = df.loc[df['story']==story]
+
+    # build units_and_cycles representation for each story
+    units = df.loc['text'].unique()
+    units_and_cycles = [[units[0]]]
+    for unit in units[1:]:
+        if unit[0].isupper():
+            units_and_cycles.append([])
+        units_and_cycles[-1].append(unit)
+
+    # encode recall events into trial array
+    recalls = df.loc[df['trial_type'] == 'recall']
+    trials = []
+    last_trial = 0
+    for index, row in recalls.iterrows():
+
+        # start new vector if trial changes
+        if row['trial'] != last_trial:
+            trials.append([])
+        trials[-1].append(row['item'])
+
+        last_trial = row['trial']
+
+    list_length = np.max(df.loc['position'].unique())
+    return trials, df, units_and_cycles, list_length
 
 # %% [markdown]
 # We can generate a quick preview of some datasets using this function.
