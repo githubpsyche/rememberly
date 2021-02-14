@@ -157,7 +157,7 @@ class Landscape(nn.Module):
 
         return activations, S, history
 
-    def output_probabilities(self, reading_cycle, sensitivity=1.0,
+    def output_probabilities(self, reading_cycles, sensitivity=1.0,
                              return_as_cycles=False):
         """
         Extension of forward to get activations as a distribution vector, or as a
