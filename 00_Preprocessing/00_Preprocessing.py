@@ -78,14 +78,14 @@ def long_propositions(sentence):
     Heuristic for selecting between proposition representations that always prefers the longest string and removes case.
     """
     initial_propositions = propositions(sentence)
-    propositions = []
+    props = []
     for proposition_list in initial_propositions:
         choice = proposition_list[0]
         for p in proposition_list:
             if len(p) < len(choice):
                 choice = p
-        propositions.append(choice.lower())
-    return propositions
+        props.append(choice.lower())
+    return props
 
 # %% [markdown]
 # # Cycles and Units
