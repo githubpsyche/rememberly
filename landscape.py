@@ -2,15 +2,9 @@
 Initial implementation of Landscape model
 To initialize it, pass in the
 """
-
-import torch
-from torch import nn
-
-# get device
-if torch.cuda.is_available():
-    dev = torch.device("cuda:0")
-else:
-    dev = torch.device("cpu")
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from LandscapeModel.textsimilarity import TextSimilarity
 
 
 class Landscape():
