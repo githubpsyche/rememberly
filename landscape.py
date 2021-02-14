@@ -4,7 +4,7 @@ To initialize it, pass in the
 """
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from LandscapeModel.textsimilarity import TextSimilarity
+from textsimilarity import TextSimilarity
 
 
 class Landscape():
