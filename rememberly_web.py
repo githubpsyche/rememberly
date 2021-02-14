@@ -3,7 +3,7 @@ import numpy as np
 
 from Treehacks_recommendation import *
 from visualisation import *
-from LandscapeModel.landscape import Landscape
+from landscape import Landscape
 from Preprocessing import *
 
 # setup flask
