@@ -27,8 +27,6 @@ def startpage():
         # print(input_list)
         output1 = textsummary(input_list)
         session['outputText'] = output1[0]
-        searchresult = googleSearchURL(["Mozart deaf", "shakespeare warwickshire"])
-        session['SearchResult'] = searchresult
         return redirect(url_for('analyze'))
     return render_template('interface.html')
 
@@ -55,6 +53,9 @@ def analyze():
         for reading_cycle in text_units:
             recall_cycles += [*reading_cycle]
         graph_url = landscape_surfaceplot(output_probs, recall_cycles)
+        
+        searchresult = googleSearchURL(recall_cycles)
+        session['SearchResult'] = searchresult
 
         return render_template('interface_with_text.html',
                                inputText=session["inputText"],
