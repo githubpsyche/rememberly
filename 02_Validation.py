@@ -75,7 +75,7 @@ def prepare_brownschmidt_data(path, story):
     df = df.loc[df['story']==story]
 
     # build units_and_cycles representation for each story
-    units = df.loc['text'].unique()
+    units = df['text'].unique()
     units_and_cycles = [[units[0]]]
     for unit in units[1:]:
         if unit[0].isupper():
@@ -95,16 +95,16 @@ def prepare_brownschmidt_data(path, story):
 
         last_trial = row['trial']
 
-    list_length = np.max(df.loc['position'].unique())
+    list_length = np.max(df['position'].unique())
     return trials, df, units_and_cycles, list_length
 
 # %% [markdown]
 # We can generate a quick preview of some datasets using this function.
 
 # %%
-text_trials, text_events, text_length = prepare_brownschmidt_data('', 0)
+text_trials, text_events, text_units_and_cycles, text_length = prepare_brownschmidt_data('data/sequences/human/clean_human.csv', 'Fisherman')
 
-murd_events.head()
+text_events.head()
 
 # %% [markdown]
 # ## Configuring the Parameter Search
@@ -115,10 +115,16 @@ murd_events.head()
 #export
 #hide
 import numpy as np
+from landscape import Landscape
 from numba import njit
 
-@njit(fastmath=True, nogil=True)
-def data_likelihood(trials, ):
+#@njit(fastmath=True, nogil=True)
+def data_likelihood(trials, sbert_model_name,
+                 initial_max_activation=1.0,
+                 initial_decay_rate=0.1,
+                 initial_memory_capacity=5.0,
+                 initial_learning_rate=0.9,
+                 initial_semantic_strength_coeff=1.0):
     """
     Generalized cost function for fitting the Landscape model optimized using the numba library.
     
@@ -133,12 +139,9 @@ def data_likelihood(trials, ):
     **Returns** the negative sum of log-likelihoods across specified trials conditional on the specified parameters and
     the mechanisms of InstanceCMR.
     """
-    
-    model = InstanceCMR(item_count, encoding_drift_rate, 
-                      start_drift_rate, recall_drift_rate, shared_support,
-                      item_support, learning_rate, primacy_scale, 
-                      primacy_decay, stop_probability_scale, 
-                      stop_probability_growth, choice_sensitivity)
+
+    model = Landscape(sbert_model_name, initial_max_activation, initial_decay_rate, initial_memory_capacity, 
+        initial_learning_rate, initial_semantic_strength_coeff)
     
     model.experience(np.eye(item_count, item_count + 1, 1))
     
@@ -178,8 +181,7 @@ hand_fit_parameters = {
     'stop_probability_growth': 0.3,
     'choice_sensitivity': 2
 }
-data_likelihood(murd_trials[:60], **hand_fit_parameters)
-
+data_likelihood(text_trials[:60], **hand_fit_parameters)
 
 # %% [markdown]
 # returns `1154.6050515722645`.
@@ -199,7 +201,7 @@ def generate_objective_function(data_to_fit, fixed_parameters, free_parameters):
     fit using an optimization function.
 
     Required model_class attributes:  
-    - experience: adding a new trace to the memory model  
+    - cycles: adding a new experience to the memory model  
     - force_recall: forces recall of item, ignoring model state  
     - outcome_probabilities: returns item supports given activations
 
@@ -229,7 +231,7 @@ except:
 # `encoding_drift_rate` with code like the following:
 
 # %%
-cost_function = generate_objective_function(murd_trials[:60], hand_fit_parameters, ['encoding_drift_rate'], )
+cost_function = generate_objective_function(text_trials[:60], hand_fit_parameters, ['encoding_drift_rate'], )
 
 cost_function([.8]), cost_function([.3])
 
@@ -382,4 +384,4 @@ except:
 # one line:
 
 # %%
-visualize_fit(InstanceCMR, {**hand_fit_parameters, **{'encoding_drift_rate': result.x[0]}}, murd_events, 'subject == 1', experiment_count=1000, savefig=True)
+visualize_fit(Landscape, {**hand_fit_parameters, **{'encoding_drift_rate': result.x[0]}}, murd_events, 'subject == 1', experiment_count=1000, savefig=True)
